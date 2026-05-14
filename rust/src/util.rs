@@ -78,6 +78,11 @@ pub fn get_uint32_le(src: &[u8], offs: usize) -> u32 {
     (src[offs] as u32) | ((src[offs+1] as u32) << 8) | ((src[offs+2] as u32) << 16) | ((src[offs+3] as u32) << 24)
 }
 
+pub fn get_float32_le(src: &[u8], offs: usize) -> f32 {
+    let array: [u8; 4] = [ src[offs+3], src[offs+2], src[offs+1], src[offs] ];
+    f32::from_be_bytes(array)
+}
+
 pub fn get_uint16_be(src: &[u8], offs: usize) -> u16 {
     ((src[offs] as u16) << 8) | (src[offs+1] as u16)
 }
@@ -88,6 +93,11 @@ pub fn get_uint24_be(src: &[u8], offs: usize) -> u32 {
 
 pub fn get_uint32_be(src: &[u8], offs: usize) -> u32 {
     ((src[offs] as u32) << 24) | ((src[offs+1] as u32) << 16) | ((src[offs+2] as u32) << 8) | (src[offs+3] as u32)
+}
+
+pub fn get_float32_be(src: &[u8], offs: usize) -> f32 {
+    let array: [u8; 4] = [ src[offs], src[offs+1], src[offs+2], src[offs+3] ];
+    f32::from_be_bytes(array)
 }
 
 #[wasm_bindgen]

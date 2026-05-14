@@ -3,6 +3,7 @@ pub mod compression;
 pub mod glsl_compile;
 pub mod gx_texture;
 pub mod halo;
+pub mod nierautomata;
 pub mod tegra_texture;
 pub mod unity;
 pub mod util;
