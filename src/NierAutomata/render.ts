@@ -2,18 +2,27 @@ import { DeviceProgram } from "../Program";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 
 // Default shader for debugging
-export class DefaultShader extends DeviceProgram {
+export class WorldBlockShader extends DeviceProgram {
     public static a_Position = 0;
-    public static a_TexCoord = 1;
+    public static a_Color = 1;
+    public static a_TexCoord = 2;
+    public static a_Normal = 3;
+
+    public static ub_SceneParams = 0;
+    public static ub_ObjectParams = 1;
 
     // Vertex shader
     public override vert = `
-${DefaultShader.Common}
+${WorldBlockShader.Common}
 
-layout(location = ${DefaultShader.a_Position}) in vec3 a_Position;
-layout(location = ${DefaultShader.a_TexCoord}) in vec2 a_TexCoord;
+layout(location = ${WorldBlockShader.a_Position}) in vec3 a_Position;
+layout(location = ${WorldBlockShader.a_Color}) in vec3 a_Color;
+layout(location = ${WorldBlockShader.a_TexCoord}) in vec2 a_TexCoord;
+layout(location = ${WorldBlockShader.a_Normal}) in vec3 a_Normal;
 
 out vec2 v_TexCoord;
+out vec3 v_Color;
+out vec3 v_Normal;
 
 void main() {
     // Compute our world-space position from the position vertex attribute, and our uniform data.
@@ -28,18 +37,21 @@ void main() {
 
     // Output our texture coordinates for sampling to the fragment shader below.
     v_TexCoord = a_TexCoord.xy;
+    v_Color = a_Color.rgb;
+    v_Normal = a_Normal.xyz;
 }
 `;
 
     // Fragment shader
     public override frag = `
-${DefaultShader.Common}
+${WorldBlockShader.Common}
 
 in vec2 v_TexCoord;
+in vec3 v_Color;
 
 void main() {
     // Use the UV coordinates output by the vertex shader to sample our texture.
-    gl_FragColor = texture(SAMPLER_2D(u_Texture), v_TexCoord.xy);
+    gl_FragColor = vec4(v_Color, 1.0);//texture(SAMPLER_2D(u_Texture), v_TexCoord.xy);
 }
 `
 
@@ -58,7 +70,7 @@ layout(std140) uniform ub_SceneParams {
 
 // Define a second matrix for our cube's transform. This could be in the uniform buffer above, however
 // I'm declaring two of them just to show how that works.
-layout(std140) uniform ub_CubeParams {
+layout(std140) uniform ub_ObjectParams {
     Mat3x4 u_WorldFromLocal;
 };
 

@@ -33,7 +33,8 @@ pub struct DatEntry {
 pub struct DatArchive {
     header: DatHeader,
 
-    entries: Vec<DatEntry>
+    entries: Vec<DatEntry>,
+    models: Vec<WmbFile>
 }
 
 impl DatArchive {
@@ -77,7 +78,7 @@ impl DatArchive {
         let mut file_names = Vec::with_capacity(num_files);
         let mut offset = name_table_offset + 4;
         for _ in 0..num_files {
-            file_names.push(read_string(data, offset, max_file_name_size as usize)?);
+            file_names.push(util::get_string(data, offset, max_file_name_size as usize)?);
             offset += max_file_name_size as usize;
         }
 
@@ -86,6 +87,7 @@ impl DatArchive {
         assert!(file_names.len() == num_files);
 
         let mut entries = Vec::with_capacity(num_files);
+        let mut models = Vec::with_capacity(num_files);
         for i in 0..num_files {
             let file_offset = file_offsets[i];
             let file_magic = util::get_uint32_be(data, file_offset as usize);
@@ -97,7 +99,7 @@ impl DatArchive {
                 name: file_names[i].clone()
             };
             if entry.magic == constants::WMB_MAGIC {
-                let wmb_file = WmbFile::new(data, file_offset as usize);
+                models.push(WmbFile::new(data, file_offset as usize));
             }
             entries.push(entry);
             console::log_1(&format!(" - File {}: \"{}\", type: {}, offset: {}, size: {} bytes",
@@ -117,12 +119,13 @@ impl DatArchive {
                 size_table_offset,
                 hash_map_offset
             },
-            entries
+            entries,
+            models
         })
     }
 
     pub fn len(&self) -> usize {
-        self.entries.len()
+        self.models.len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -148,6 +151,14 @@ impl DatFile {
 
     pub fn len(&self) -> usize {
         self.inner.len()
+    }
+
+    pub fn models(&self) -> Vec<WmbFile> {
+        self.inner.models.to_vec()
+    }
+
+    pub fn model(&self, index: usize) -> WmbFile {
+        self.inner.models[index].clone()
     }
 }
 
@@ -176,29 +187,6 @@ fn read_u32_table_le(
 
     Ok(result)
 }
-
-fn read_string(
-    data: &Vec<u8>,
-    offset: usize,
-    count: usize
-) -> io::Result<String> {
-
-    let end = offset + count;
-    if end > data.len() {
-        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Not enough data!"));
-    }
-
-    let slice = &data[offset..end];
-    // `count`` is actually the max string size, it could be shorter so let's find the first '\0'
-    let first_zero = slice.iter().position(
-        |char| { *char == 0u8 }).
-        ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "Not enough data!"))?;
-    let shorter_slice = &data[offset..offset+first_zero];
-    let file_name = String::from_utf8_lossy(&shorter_slice).to_string();
-
-    Ok(file_name)
-}
-
 
 fn uint_to_magic(
     nb: u32

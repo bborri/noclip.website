@@ -1,3 +1,5 @@
+use std::io;
+use float16::f16;
 use wasm_bindgen::prelude::*;
 
 // http://www.mindcontrol.org/~hplus/graphics/expand-bits.html
@@ -74,13 +76,23 @@ pub fn get_uint24_le(src: &[u8], offs: usize) -> u32 {
     (src[offs] as u32) | ((src[offs+1] as u32) << 8) | ((src[offs+2] as u32) << 16)
 }
 
+pub fn get_int32_le(src: &[u8], offs: usize) -> i32 {
+    let array: [u8; 4] = [ src[offs], src[offs+1], src[offs+2], src[offs+3] ];
+    i32::from_le_bytes(array)
+}
+
 pub fn get_uint32_le(src: &[u8], offs: usize) -> u32 {
     (src[offs] as u32) | ((src[offs+1] as u32) << 8) | ((src[offs+2] as u32) << 16) | ((src[offs+3] as u32) << 24)
 }
 
+pub fn get_float16_le(src: &[u8], offs: usize) -> f16 {
+    let array: [u8; 2] = [ src[offs], src[offs+1] ];
+    f16::from_le_bytes(array)
+}
+
 pub fn get_float32_le(src: &[u8], offs: usize) -> f32 {
-    let array: [u8; 4] = [ src[offs+3], src[offs+2], src[offs+1], src[offs] ];
-    f32::from_be_bytes(array)
+    let array: [u8; 4] = [ src[offs], src[offs+1], src[offs+2], src[offs+3] ];
+    f32::from_le_bytes(array)
 }
 
 pub fn get_uint16_be(src: &[u8], offs: usize) -> u16 {
@@ -98,6 +110,28 @@ pub fn get_uint32_be(src: &[u8], offs: usize) -> u32 {
 pub fn get_float32_be(src: &[u8], offs: usize) -> f32 {
     let array: [u8; 4] = [ src[offs], src[offs+1], src[offs+2], src[offs+3] ];
     f32::from_be_bytes(array)
+}
+
+pub fn get_string(
+    data: &[u8],
+    offset: usize,
+    max_string_size: usize
+) -> io::Result<String> {
+
+    let end = offset + max_string_size;
+    if end > data.len() {
+        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Not enough data!"));
+    }
+
+    let slice = &data[offset..end];
+    // `max_string_size` is a maximum, the string could be shorter so let's find the first '\0'
+    let first_zero = slice.iter().position(
+        |char| { *char == 0u8 }).
+        ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "Not enough data!"))?;
+    let shorter_slice = &data[offset..offset+first_zero];
+    let file_name = String::from_utf8_lossy(&shorter_slice).to_string();
+
+    Ok(file_name)
 }
 
 #[wasm_bindgen]

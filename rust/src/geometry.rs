@@ -64,7 +64,7 @@ impl Plane {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct AABB {
     pub min: Vec3,
     pub max: Vec3,

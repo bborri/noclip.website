@@ -77,6 +77,15 @@ export function convertToTriangleIndexBuffer(topology: GfxTopology, indexBuffer:
     return newBuffer;
 }
 
+export function convertToTriangleIndexBuffer32(topology: GfxTopology, indexBuffer: Uint32Array): Uint32Array {
+    if (topology === GfxTopology.Triangles)
+        return indexBuffer;
+    const newSize = getTriangleIndexCountForTopologyIndexCount(topology, indexBuffer.length);
+    const newBuffer = new Uint32Array(newSize);
+    convertToTriangles(newBuffer, 0, topology, indexBuffer);
+    return newBuffer;
+}
+
 export function makeTriangleIndexBuffer(topology: GfxTopology, baseVertex: number, numVertices: number): Uint16Array {
     const newSize = getTriangleIndexCountForTopologyIndexCount(topology, numVertices);
     const newBuffer = new Uint16Array(newSize);
