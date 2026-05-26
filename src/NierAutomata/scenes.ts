@@ -1,30 +1,17 @@
 import { rust } from "../rustlib.js";
-import { Blue, Color, Green, Red } from '../Color.js';
 import { mat4 } from 'gl-matrix';
 import * as Viewer from '../viewer.js';
 import { SceneContext } from '../SceneBase.js';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxDevice, GfxProgram, GfxCullMode, GfxFrontFaceMode, GfxPrimitiveTopology } from '../gfx/platform/GfxPlatform.js';
-import { GfxInputLayout }  from '../gfx/platform/GfxPlatformImpl.js';
+import { GfxDevice, GfxProgram, GfxCullMode, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInst, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 
 import { WorldBlockShader } from "./render.js";
-import { NierCache, NierWorldBlock } from "./cache.js";
-import { assert } from "../util.js";
-/*
-import {
-    ReadonlyMat4,
-    ReadonlyVec3,
-    mat4,
-    quat,
-    vec3,
-    vec4
-} from "gl-matrix";
-import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer.js";
-*/
+import { NierCache } from "./cache.js";
+
 export class NierRenderer implements Viewer.SceneGfx {
     private context: SceneContext;
     private renderHelper: GfxRenderHelper;
@@ -36,7 +23,7 @@ export class NierRenderer implements Viewer.SceneGfx {
         this.context = context;
         this.renderHelper = new GfxRenderHelper(device);
         this.shader = this.renderHelper.renderCache.createProgram(new WorldBlockShader());
-        this.cache = new NierCache(device, context);
+        this.cache = new NierCache(device, context, this.renderHelper.renderCache);
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -57,29 +44,25 @@ export class NierRenderer implements Viewer.SceneGfx {
 
         const objectTransform = mat4.create();
 
-        let blockName = "g20908";
+        let blockName = "g11420"; //"g20908";
         const worldBlock = this.cache.loadBlock(blockName);
         if (worldBlock === undefined) {
             console.log("World block " + blockName + ' not yet ready !');
         }
         else {
             const renderInst = renderInstManager.newRenderInst();
-            //renderInst.setPrimitiveTopology(GfxPrimitiveTopology.TriangleStrip);
-            renderInst.setMegaStateFlags({ cullMode: GfxCullMode.None, frontFace: GfxFrontFaceMode.CW });
-            worldBlock?.setAsInput(device, renderInst, this.cache);
+            renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
+            worldBlock?.setAsInput(renderInst);
             const objectParams = renderInst.allocateUniformBufferF32(WorldBlockShader.ub_ObjectParams, 12);
             let offs = 0;
             offs += fillMatrix4x3(objectParams, offs, objectTransform);
-            //block.debugDrawTris(this.renderHelper.debugDraw);
             renderInst.validate();
             renderInstManager.submitRenderInst(renderInst);
+            //super..textureHolder.push(...worldBlock.textures);
         }
 
-        //template.setSamplerBindingsFromTextureMappings(this.textures[i]);
-        // TODO: Reactivate culling when debugging is done
-        template.setMegaStateFlags({ cullMode: GfxCullMode.None, frontFace: GfxFrontFaceMode.CW });
+        template.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
 
-        //renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
     }

@@ -2,9 +2,8 @@
 // Contains models and textures in sub-files
 
 use std::io;
-use std::convert::TryInto;
 
-use crate::{nierautomata::constants, nierautomata::wmb::WmbFile, util};
+use crate::{nierautomata::constants, nierautomata::wmb::WmbFile, nierautomata::wtb::WtbFile, util};
 
 use wasm_bindgen::prelude::*;
 use web_sys::console;
@@ -34,11 +33,12 @@ pub struct DatArchive {
     header: DatHeader,
 
     entries: Vec<DatEntry>,
-    models: Vec<WmbFile>
+    models: Vec<WmbFile>,
+    texture_blocks: Vec<WtbFile>
 }
 
 impl DatArchive {
-    pub fn new(data: &Vec<u8>) -> io::Result<Self> {
+    pub fn new(data: &[u8]) -> io::Result<Self> {
         // Parse header
         let mut offset: usize = 0;
 
@@ -62,13 +62,13 @@ impl DatArchive {
         let hash_map_offset = util::get_uint32_le(data, offset) as usize;
 
         // Read file offsets
-        let file_offsets = read_u32_table_le(
+        let file_offsets = util::get_uint32_le_array(
             &data,
             file_table_offset,
             num_files,
         )?;
         // Read file sizes
-        let file_sizes = read_u32_table_le(
+        let file_sizes = util::get_uint32_le_array(
             &data,
             size_table_offset as usize,
             num_files,
@@ -88,6 +88,7 @@ impl DatArchive {
 
         let mut entries = Vec::with_capacity(num_files);
         let mut models = Vec::with_capacity(num_files);
+        let mut texture_blocks = Vec::with_capacity(num_files);
         for i in 0..num_files {
             let file_offset = file_offsets[i];
             let file_magic = util::get_uint32_be(data, file_offset as usize);
@@ -100,6 +101,11 @@ impl DatArchive {
             };
             if entry.magic == constants::WMB_MAGIC {
                 models.push(WmbFile::new(data, file_offset as usize));
+            }
+            if entry.magic == constants::WTB_MAGIC {
+                texture_blocks.push(
+                    WtbFile::new(&data[file_offset as usize..(file_offset + file_sizes[i]) as usize],
+                    file_offset as usize));
             }
             entries.push(entry);
             console::log_1(&format!(" - File {}: \"{}\", type: {}, offset: {}, size: {} bytes",
@@ -120,7 +126,8 @@ impl DatArchive {
                 hash_map_offset
             },
             entries,
-            models
+            models,
+            texture_blocks
         })
     }
 
@@ -149,44 +156,15 @@ impl DatFile {
         Ok(DatFile { inner: archive })
     }
 
-    pub fn len(&self) -> usize {
-        self.inner.len()
-    }
-
     pub fn models(&self) -> Vec<WmbFile> {
         self.inner.models.to_vec()
     }
 
-    pub fn model(&self, index: usize) -> WmbFile {
-        self.inner.models[index].clone()
+    pub fn texture_blocks(&self) -> Vec<WtbFile> {
+        self.inner.texture_blocks.to_vec()
     }
 }
 
-// =======================
-// Helpers
-// =======================
-
-// Little-endian
-fn read_u32_table_le(
-    data: &Vec<u8>,
-    offset: usize,
-    count: usize,
-) -> io::Result<Vec<u32>> {
-    let mut result = Vec::with_capacity(count);
-    let end = offset + count * 4;
-
-    if end > data.len() {
-        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Not enough data!"));
-    }
-
-    let slice = &data[offset..end];
-    for chunk in slice.chunks_exact(4) {
-        let buf: [u8; 4] = chunk.try_into().unwrap();
-        result.push(u32::from_le_bytes(buf));
-    }
-
-    Ok(result)
-}
 
 fn uint_to_magic(
     nb: u32

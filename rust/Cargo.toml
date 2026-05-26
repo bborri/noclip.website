@@ -19,6 +19,7 @@ byteorder = "1.4.3"
 console_error_panic_hook = "0.1.7"
 deku = { version = "0.19.1", features = ["logging"] }
 env_logger = "0.10.1"
+float16 = "0.1.5"
 inflate = "0.4.5"
 js-sys = "0.3.60"
 polymorph = { git = "https://github.com/wgreenberg/polymorph", features = ["sheepfile-reader"], default-features = false }

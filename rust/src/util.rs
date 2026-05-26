@@ -1,4 +1,5 @@
 use std::io;
+use std::convert::TryInto;
 use float16::f16;
 use wasm_bindgen::prelude::*;
 
@@ -110,6 +111,27 @@ pub fn get_uint32_be(src: &[u8], offs: usize) -> u32 {
 pub fn get_float32_be(src: &[u8], offs: usize) -> f32 {
     let array: [u8; 4] = [ src[offs], src[offs+1], src[offs+2], src[offs+3] ];
     f32::from_be_bytes(array)
+}
+
+pub fn get_uint32_le_array(
+    data: &[u8],
+    offset: usize,
+    count: usize,
+) -> io::Result<Vec<u32>> {
+    let mut result = Vec::with_capacity(count);
+    let end = offset + count * 4;
+
+    if end > data.len() {
+        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Not enough data!"));
+    }
+
+    let slice = &data[offset..end];
+    for chunk in slice.chunks_exact(4) {
+        let buf: [u8; 4] = chunk.try_into().unwrap();
+        result.push(u32::from_le_bytes(buf));
+    }
+
+    Ok(result)
 }
 
 pub fn get_string(

@@ -1,80 +1,83 @@
 import { SceneContext } from '../SceneBase.js';
-import { vec3 } from 'gl-matrix';
-import { colorNewFromRGBA } from '../Color.js';
-import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform.js';
-import { GfxRenderInst } from '../gfx/render/GfxRenderInstManager.js';
-import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer.js";
-import { NierDatFile, NierVertexGroup } from "noclip-rust-support";
-import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
-import { GfxTopology, convertToTriangleIndexBuffer32 } from '../gfx/helpers/TopologyHelpers.js'
-import { DebugDraw } from '../gfx/helpers/DebugDraw.js';
+import { GfxDevice, GfxTexture, GfxSampler, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxFormat, GfxIndexBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { GfxRenderInst } from '../gfx/render/GfxRenderInstManager.js';
+import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import * as DDS from '../DarkSouls/dds.js';
+
+import { NierDatFile } from "noclip-rust-support";
 import { WorldBlockShader } from './render.js';
-import { World } from '../SuperMonkeyBall/World.js';
 
 const pathBase = "NierAutomata";
 
 export class NierWorldBlock {
-    private positions: Float32Array;
-    private colors: Float32Array;
-    private uvs: Float32Array;
-    private normals: Float32Array;
-    private indices: Uint32Array;
-    private datFile: NierDatFile;
+    private indicesCount: number = 0;
+    private inputLayout: GfxInputLayout | null = null;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
+    public textures: GfxTexture[] = [];
+    private sampler: GfxSampler;
 
-    constructor(datFile: NierDatFile) {
-        this.datFile = datFile;
-        let vg = datFile.model(0).vertex_group(0);
-        this.positions = vg.positions;
-        this.colors = vg.colors;
-        this.uvs = vg.tex_coords;
-        this.normals = vg.normals;
-        //this.indices = convertToTriangleIndexBuffer32(GfxTopology.TriStrips, vg.indices);
-        this.indices = vg.indices;
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, cache: NierCache, data: ArrayBufferSlice, datFile: NierDatFile) {
+        let vg = datFile.models()[0].vertex_group(0);
+        this.indicesCount = vg.indices.length;
+
+        this.inputLayout = cache.toInputLayout(this);
+        this.vertexBufferDescriptors = [
+            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vg.positions.buffer), byteOffset: 0 },
+            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vg.colors.buffer), byteOffset: 0 },
+            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vg.tex_coords.buffer), byteOffset: 0 },
+            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, vg.normals.buffer), byteOffset: 0 }
+        ];
+        this.indexBufferDescriptor = {
+            buffer: createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, vg.indices.buffer), byteOffset: 0
+        };
+
+        this.sampler = renderCache.createSampler({
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Nearest,
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat
+        });
+        let textureBlocks = datFile.texture_blocks();
+        this.textures = textureBlocks[0].textures.map(texture => {
+            const dds = DDS.parse(data.slice(textureBlocks[0].block_offset + texture.offset, textureBlocks[0].block_offset + texture.offset + texture.size), 'DDSTexture', false);
+            return DDS.createTexture(device, dds);
+        });
+        console.log(`Loaded world block with ${this.indicesCount} indices and ${this.textures.length} textures!`);
     }
 
     public indexCount(): number {
-        return this.indices.length;
+        return this.indicesCount;
     }
 
-    public debugDrawTris(debugDraw: DebugDraw) {
-        for (let i = 0; i < this.indices.length - 1; i += 3) {
-            let index1 = this.indices[i];
-            let index2 = this.indices[i+1];
-            let index3 = this.indices[i+2];
-            debugDraw.drawTriSolidP(
-                vec3.fromValues(this.positions[index1*3], this.positions[index1*3+1], this.positions[index1*3+2]),
-                vec3.fromValues(this.positions[index2*3], this.positions[index2*3+1], this.positions[index2*3+2]),
-                vec3.fromValues(this.positions[index3*3], this.positions[index3*3+1], this.positions[index3*3+2]),
-                colorNewFromRGBA(0.2, 0.2, 0.2));
-        }
-    }
+    public setAsInput(renderInst: GfxRenderInst) {
 
-    public setAsInput(device: GfxDevice, renderInst: GfxRenderInst, cache: NierCache) {
-        let vertexBufferDescriptors = [
-            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.positions.buffer), byteOffset: 0 },
-            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.colors.buffer), byteOffset: 0 },
-            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.uvs.buffer), byteOffset: 0 },
-            { buffer: createBufferFromData(device, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, this.normals.buffer), byteOffset: 0 }
-        ];
         renderInst.setVertexInput(
-            cache.toInputLayout(this),
-            vertexBufferDescriptors,
-            { buffer: createBufferFromData(device, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static, this.indices.buffer), byteOffset: 0  });
+            this.inputLayout,
+            this.vertexBufferDescriptors,
+            this.indexBufferDescriptor);
+        renderInst.setSamplerBindingsFromTextureMappings(this.textures.map(texture => {
+            return { gfxTexture: texture, gfxSampler: this.sampler };
+        }));    
         renderInst.setDrawCount(this.indexCount());
+        renderInst.setInstanceCount(1);
     }
 }
 
 export class NierCache {
     private device: GfxDevice;
     private context: SceneContext;
+    private renderCache: GfxRenderCache;
     private cache: GfxRenderCache;
     private worldBlocks: Map<string, NierWorldBlock | undefined>;
 
-    constructor(device: GfxDevice, context: SceneContext) {
+    constructor(device: GfxDevice, context: SceneContext, renderCache: GfxRenderCache) {
         this.device = device;
         this.context = context;
+        this.renderCache = renderCache;
         this.cache = new GfxRenderCache(device);
         this.worldBlocks = new Map<string, NierWorldBlock>;
     }
@@ -119,14 +122,15 @@ export class NierCache {
         console.time("loading DTT");
         const file = await this.loadFile(this.dttFromModel(modelName));
         //this.loadFile(this.datFromModel(modelName)); // TODO: Also load corresponding .dat
-        const block = new NierWorldBlock(await file);
+        const block = new NierWorldBlock(this.device, this.renderCache, this, await file.binary, await file.datFile);
         await console.timeEnd("loading DTT");
         return await block;
     }
 
-    private async loadFile(path: string): Promise<NierDatFile> {
+    private async loadFile(path: string): Promise<{ binary: ArrayBufferSlice; datFile: NierDatFile }> {
         let binary = await this.context.dataFetcher.fetchData(path);
-        return new NierDatFile(await binary.createTypedArray(Uint8Array));
+        let datFile = new NierDatFile(await binary.createTypedArray(Uint8Array))
+        return { binary, datFile };
     }
 
     private pathFromModel(modelName: string): string {

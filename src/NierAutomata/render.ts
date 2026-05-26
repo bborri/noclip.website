@@ -20,24 +20,16 @@ layout(location = ${WorldBlockShader.a_Color}) in vec3 a_Color;
 layout(location = ${WorldBlockShader.a_TexCoord}) in vec2 a_TexCoord;
 layout(location = ${WorldBlockShader.a_Normal}) in vec3 a_Normal;
 
-out vec2 v_TexCoord;
 out vec3 v_Color;
+out vec2 v_TexCoord;
 out vec3 v_Normal;
 
 void main() {
-    // Compute our world-space position from the position vertex attribute, and our uniform data.
-    // I use a "t_" prefix to mean "temporary variable".
-    // The UnpackMatrix call here comes from the MatrixLibrary (see the Common declarations below).
     vec3 t_PositionWorld = (UnpackMatrix(u_WorldFromLocal) * vec4(a_Position.xyz, 1.0f)).xyz;
-
-    // Compute our output clip-space position from the world-space position.
-    // I like to name matrices with the format "SpaceFromSpace". That way, you can snap them together like:
-    //   u_ClipFromWorld * u_WorldFromView * u_ViewFromLocal * t_PositionView.
     gl_Position = UnpackMatrix(u_ClipFromWorld) * vec4(t_PositionWorld, 1.0f);
 
-    // Output our texture coordinates for sampling to the fragment shader below.
-    v_TexCoord = a_TexCoord.xy;
     v_Color = a_Color.rgb;
+    v_TexCoord = a_TexCoord.xy;
     v_Normal = a_Normal.xyz;
 }
 `;
@@ -46,12 +38,16 @@ void main() {
     public override frag = `
 ${WorldBlockShader.Common}
 
-in vec2 v_TexCoord;
 in vec3 v_Color;
+in vec2 v_TexCoord;
+in vec3 v_Normal;
 
 void main() {
-    // Use the UV coordinates output by the vertex shader to sample our texture.
-    gl_FragColor = vec4(v_Color, 1.0);//texture(SAMPLER_2D(u_Texture), v_TexCoord.xy);
+    vec4 c = texture(SAMPLER_2D(u_TextureDiffuse), v_TexCoord.xy);
+    // Colors in Nier are stored in a strange way, among 3 textures
+    // color = (1 - r) * (g * color3 + (1 - g) * color2) + r * color1
+    // source: https://discord.com/channels/457656329235070981/837783151329411122/990068822063075358
+    gl_FragColor = vec4(v_Normal, 1.0); //vec4(c.rgb, 1.0);
 }
 `
 
@@ -75,6 +71,6 @@ layout(std140) uniform ub_ObjectParams {
 };
 
 // Declare our texture for the cube.
-layout(location = 0) uniform sampler2D u_Texture;
+layout(location = 0) uniform sampler2D u_TextureDiffuse;
 `;
 }

@@ -1,7 +1,7 @@
 // WMB parser
 // Contains World Mesh data
 
-use crate::{geometry::AABB, nierautomata::constants, util::{self}};
+use crate::{geometry::AABB, nierautomata::constants, util};
 
 use float16::f16;
 use nalgebra_glm::{TVec2, TVec3, Vec3, TVec4, make_vec2, make_vec3, make_vec4};
