@@ -100,7 +100,8 @@ impl DatArchive {
                 name: file_names[i].clone()
             };
             if entry.magic == constants::WMB_MAGIC {
-                models.push(WmbFile::new(data, file_offset as usize));
+                models.push(WmbFile::new(&data[file_offset as usize..(file_offset + file_sizes[i]) as usize],
+                    file_offset as usize));
             }
             if entry.magic == constants::WTB_MAGIC {
                 texture_blocks.push(

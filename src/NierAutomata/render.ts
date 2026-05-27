@@ -43,13 +43,23 @@ in vec2 v_TexCoord;
 in vec3 v_Normal;
 
 void main() {
-    vec4 c = texture(SAMPLER_2D(u_TextureDiffuse), v_TexCoord.xy);
-    // Colors in Nier are stored in a strange way, among 3 textures
+    vec4 c1 = texture(SAMPLER_2D(u_TextureColor1), v_TexCoord.xy);
+    vec4 c2 = texture(SAMPLER_2D(u_TextureColor2), v_TexCoord.xy);
+    vec4 c3 = texture(SAMPLER_2D(u_TextureColor3), v_TexCoord.xy);
+
+    // Colors in Nier are stored in a strange way, among 3 textures.
     // color = (1 - r) * (g * color3 + (1 - g) * color2) + r * color1
     // source: https://discord.com/channels/457656329235070981/837783151329411122/990068822063075358
-    gl_FragColor = vec4(v_Normal, 1.0); //vec4(c.rgb, 1.0);
+    float r = c2.r;
+    float g = c2.g;
+    vec3 color1 = c1.rgb;
+    vec3 color2 = c2.rgb;
+    vec3 color3 = c3.rgb;
+    vec3 outColor = (1.0 - r) * (g * color3 + (1.0 - g) * color2) + r * color1;
+
+    gl_FragColor = vec4(v_Normal.rgb, 1.0); //vec4(outColor, 1.0);
 }
-`
+`;
 
     public static Common = `
 // Import some helper code. In this case, we use a special matrix library as a workaround for some computers
@@ -71,6 +81,8 @@ layout(std140) uniform ub_ObjectParams {
 };
 
 // Declare our texture for the cube.
-layout(location = 0) uniform sampler2D u_TextureDiffuse;
+layout(location = 0) uniform sampler2D u_TextureColor1;
+layout(location = 1) uniform sampler2D u_TextureColor2;
+layout(location = 2) uniform sampler2D u_TextureColor3;
 `;
 }

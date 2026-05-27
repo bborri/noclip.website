@@ -12,7 +12,31 @@ const WMB3_MESH_SIZE: usize = 7 * size_of::<u32>();
 const WMB3_AABB_SIZE: usize = 6 * size_of::<f32>();
 const WMB_VERTEX_GROUP_SIZE: usize = 12 * size_of::<u32>();
 const WMB_LOD_SIZE: usize = 5 * size_of::<u32>();
+const WMB_MATERIAL_SIZE: usize = 12 * size_of::<u32>();
+const WMB_TEXTURE_REFERENCE_SIZE: usize = 2 * size_of::<u32>();
+const WMB_PARAMETER_GROUP_SIZE: usize = 3 * size_of::<u32>();
+const WMB_VARIABLE_SIZE: usize = 2 * size_of::<u32>();
 
+
+#[derive(Debug, Clone)]
+#[wasm_bindgen(js_name = "NierMaterial")]
+pub struct Material {
+    texture_references: Vec<TextureReference>,
+    parameter_groups: Vec<MaterialParameterGroup>,
+    variables: Vec<MaterialVariable>
+}
+
+#[derive(Debug, Clone)]
+pub struct MaterialParameterGroup {
+    index: i32,
+    parameters: Vec<f32>
+}
+
+#[derive(Debug, Clone)]
+pub struct MaterialVariable {
+    name: String,
+    value: f32
+}
 
 #[derive(Debug)]
 #[wasm_bindgen(js_name = "NierLoD")]
@@ -36,6 +60,12 @@ pub struct MeshReference {
     face_offset: u32,
     vertex_count: u32,
     face_count: u32
+}
+
+#[derive(Debug, Clone)]
+pub struct TextureReference {
+    name: String,
+    texture: u32
 }
 
 #[derive(Debug, Clone)]
@@ -70,100 +100,68 @@ type Color = TVec4<f32>;
 #[derive(Debug, Clone)]
 #[wasm_bindgen(js_name = "NierWorldMesh")]
 pub struct WmbFile {
+    block_offset: usize,
     vertex_groups: Vec<VertexGroup>,
     bounding_box: AABB,
-    meshes: Vec<MeshReference>
+    meshes: Vec<MeshReference>,
+    materials: Vec<Material>
 }
 
 #[wasm_bindgen(js_class = "NierWorldMesh")]
 impl WmbFile {
-    /*
-    	self.magicNumber = wmb_fp.read(4)										# ID
-		if self.magicNumber == b'WMB3':
-			self.version = "%08x" % (read_uint32(wmb_fp))					# Version
-			self.unknown08 = read_uint32(wmb_fp)								# UnknownA
-			self.flags = read_uint32(wmb_fp)									# flags & referenceBone
-			self.bounding_box1 = read_float(wmb_fp)						# bounding_box
-			self.bounding_box2 = read_float(wmb_fp)
-			self.bounding_box3 = read_float(wmb_fp)
-			self.bounding_box4 = read_float(wmb_fp)
-			self.bounding_box5 = read_float(wmb_fp)
-			self.bounding_box6 = read_float(wmb_fp)
-			self.boneArrayOffset = read_uint32(wmb_fp)						# offsetBones
-			self.boneCount = read_uint32(wmb_fp)								# numBones
-			self.offsetBoneIndexTranslateTable = read_uint32(wmb_fp)			# offsetBoneIndexTranslateTable		
-			self.boneIndexTranslateTableSize = read_uint32(wmb_fp) 			# boneIndexTranslateTableSize
-			self.vertexGroupArrayOffset = read_uint32(wmb_fp)				# offsetVertexGroups
-			self.vertexGroupCount = read_uint32(wmb_fp)						# numVertexGroups
-			self.meshArrayOffset = read_uint32(wmb_fp)						# offsetBatches
-			self.meshCount = read_uint32(wmb_fp)								# numBatches
-			self.meshGroupInfoArrayHeaderOffset = read_uint32(wmb_fp)		# offsetLODS
-			self.meshGroupInfoArrayCount = read_uint32(wmb_fp)				# numLODS
-			self.colTreeNodesOffset = read_uint32(wmb_fp)					# offsetColTreeNodes
-			self.colTreeNodesCount = read_uint32(wmb_fp)						# numColTreeNodes
-			self.boneMapOffset = read_uint32(wmb_fp)							# offsetBoneMap
-			self.boneMapCount = read_uint32(wmb_fp)							# numBoneMap
-			self.bonesetOffset = read_uint32(wmb_fp)							# offsetBoneSets
-			self.bonesetCount = read_uint32(wmb_fp)							# numBoneSets
-			self.materialArrayOffset = read_uint32(wmb_fp)					# offsetMaterials
-			self.materialCount = read_uint32(wmb_fp)							# numMaterials
-			self.meshGroupOffset = read_uint32(wmb_fp)						# offsetMeshes
-			self.meshGroupCount = read_uint32(wmb_fp)						# numMeshes
-			self.offsetMeshMaterials = read_uint32(wmb_fp)					# offsetMeshMaterials
-			self.numMeshMaterials = read_uint32(wmb_fp)						# numMeshMaterials
-			self.unknownWorldDataArrayOffset = read_uint32(wmb_fp)			# offsetUnknown0				World Model Stuff
-			self.unknownWorldDataArrayCount = read_uint32(wmb_fp)			# numUnknown0					World Model Stuff
-			self.unknown8C = read_uint32(wmb_fp)
-     */
-    pub fn new(data: &[u8], offs: usize) -> Self {
-        let mut offset: usize = offs;
-        let magic = util::get_uint32_be(data, offset);
+
+    pub fn new(data: &[u8], block_offset: usize) -> Self {
+        let mut offs: usize = 0;
+        let magic = util::get_uint32_be(data, offs);
         assert_eq!(magic, constants::WMB_MAGIC); // "WMB3"
-        offset += 12; // skip version and 1 unknown 32-bit value
+        offs += 12; // skip version and 1 unknown 32-bit value
 
         console::log_1(&format!("Parsing WMB3 file!").into());
 
-        let flags = util::get_uint32_le(data, offset);
-        offset += 4;
+        let flags = util::get_uint32_le(data, offs);
+        offs += 4;
 
         // Bounding box
-        let aabb = Self::parse_aabb(data, offset);
-        offset += WMB3_AABB_SIZE;
+        let aabb = Self::parse_aabb(data, offs);
+        offs += WMB3_AABB_SIZE;
 
-        offset += 4 * size_of::<u32>(); // skip all bone-related stuff
+        offs += 4 * size_of::<u32>(); // skip all bone-related stuff
 
-        let vertex_group_offset = util::get_uint32_le(data, offset);
-        offset += size_of::<u32>();
-        let vertex_group_count = util::get_uint32_le(data, offset);
-        offset += size_of::<u32>();
+        let vertex_group_offset = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
+        let vertex_group_count = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
 
-        let mesh_array_offset = util::get_uint32_le(data, offset);
-        offset += size_of::<u32>();
-        let mesh_count = util::get_uint32_le(data, offset);
-        offset += size_of::<u32>();
+        let mesh_array_offset = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
+        let mesh_count = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
 
-        let lod_array_offset = util::get_uint32_le(data, offset);
-        offset += size_of::<u32>();
-        let lod_count = util::get_uint32_le(data, offset);
-        offset += size_of::<u32>();
+        let lod_array_offset = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
+        let lod_count = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
 
-        offset += 6 * size_of::<u32>(); // skip collisions and bone maps / sets
+        offs += 6 * size_of::<u32>(); // skip collisions and bone maps / sets
 
-        let material_array_offset = util::get_uint32_le(data, offset);
-        offset += size_of::<u32>();
-        let material_count = util::get_uint32_le(data, offset);
-        offset += size_of::<u32>();
+        let material_array_offset = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
+        let material_count = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
 
         console::log_1(&format!(" - Found {} vertex groups, {} meshes", vertex_group_count, mesh_count).into());
 
-        let vertex_groups = Self::parse_vertex_groups(data, offs, offs + vertex_group_offset as usize, vertex_group_count as usize);
-        let lods = Self::parse_lods(data, offs + lod_array_offset as usize, lod_count as usize);
-        let meshes = Self::parse_meshes(data, offs + mesh_array_offset as usize, mesh_count as usize);
+        let vertex_groups = Self::parse_vertex_groups(data, vertex_group_offset as usize, vertex_group_count as usize);
+        let lods = Self::parse_lods(data, lod_array_offset as usize, lod_count as usize);
+        let meshes = Self::parse_meshes(data, mesh_array_offset as usize, mesh_count as usize);
+        let materials = Self::parse_materials(data, material_array_offset as usize, material_count as usize);
 
         Self {
+            block_offset,
             vertex_groups,
             bounding_box: aabb,
-            meshes
+            meshes,
+            materials
         }
     }
 
@@ -212,17 +210,17 @@ impl WmbFile {
         }
     }
 
-    fn parse_vertex_groups(data: &[u8], start_offset: usize, offset: usize, count: usize) -> Vec<VertexGroup> {
+    fn parse_vertex_groups(data: &[u8], offset: usize, count: usize) -> Vec<VertexGroup> {
         let mut offs = offset;
         let mut vertex_groups = Vec::with_capacity(count);
         for _ in [0..count] {
-            vertex_groups.push(Self::parse_vertex_group(data, start_offset, offs));
+            vertex_groups.push(Self::parse_vertex_group(data, offs));
             offs += WMB_VERTEX_GROUP_SIZE;
         }
         vertex_groups
     }
 
-    fn parse_vertex_group(data: &[u8], start_offset: usize, offset: usize) -> VertexGroup {
+    fn parse_vertex_group(data: &[u8], offset: usize) -> VertexGroup {
         console::log_1(&format!("Parsing vertex group at offset {}", offset).into());
         let mut offs= offset;
         // Header
@@ -244,8 +242,8 @@ impl WmbFile {
 
         console::log_1(&format!(" --- Found {} vertices, {} indices, flags = {}", vertex_count, index_count, vertex_flags).into());
         // Data
-        let vertex_offs = start_offset + vertex_array_offset as usize;
-        let exdata_offs = start_offset + vertex_exdata_array_offset as usize;
+        let vertex_offs = vertex_array_offset as usize;
+        let exdata_offs = vertex_exdata_array_offset as usize;
         let mut positions = Vec::with_capacity(vertex_count as usize * 3);
         let mut tangents = Vec::with_capacity(vertex_count as usize);
         let mut normals = Vec::with_capacity(vertex_count as usize);
@@ -273,7 +271,7 @@ impl WmbFile {
                 colors.push(color[0] as f32 / 255.0, );
             }
         }
-        let index_offs = start_offset + index_array_offset as usize;
+        let index_offs = index_array_offset as usize;
         let mut indices = Vec::with_capacity(index_count as usize);
         console::log_1(&format!(" --- Parsing {} indices at offset {}", index_count, index_offs).into());
         // TODO: Proper handling of 16-bit indices. For now, just store them as u32.
@@ -340,7 +338,26 @@ impl WmbFile {
                 (data[offs + 2] as f32).floor() / 255.0,
                 (data[offs + 3] as f32).floor() / 255.0 ]
             ));
-            //offs += 4;
+            offs += 4 * size_of::<u8>();
+        }
+        let mut uv3 = None;
+        let mut uv4 = None;
+        if [12, 14].contains(&vertex_flags) {
+            uv3 = Some(make_vec2(&[
+                util::get_float16_le(data, offs),
+                util::get_float16_le(data, offs + size_of::<f16>()) ]));
+            offs += 2 * size_of::<f16>();
+            uv4 = Some(make_vec2(&[
+                util::get_float16_le(data, offs),
+                util::get_float16_le(data, offs + size_of::<f16>()) ]));
+            offs += 2 * size_of::<f16>();
+        }
+        let mut uv5 = None;
+        if vertex_flags == 12 {
+            uv5 = Some(make_vec2(&[
+                util::get_float16_le(data, offs),
+                util::get_float16_le(data, offs + size_of::<f16>()) ]));
+            //offs += 2 * size_of::<f16>();
         }
 
         let mut vertex = Vertex {
@@ -351,9 +368,9 @@ impl WmbFile {
             color: color,
             tex_coord: uv,
             tex_coord2: uv2,
-            tex_coord3: None,
-            tex_coord4: None,
-            tex_coord5: None,
+            tex_coord3: uv3,
+            tex_coord4: uv4,
+            tex_coord5: uv5,
         };
 
         vertex = Self::parse_vertex_exdata(data, exdata_offset, vertex_flags, vertex);
@@ -438,8 +455,8 @@ impl WmbFile {
 
         let name_offset = util::get_uint32_le(data, offs);
         offs += size_of::<u32>();
-        // Some implementations only copy from unsigned then replace MAX_UINT32 with -1.
-        // This way seems cleaner.
+        // Some implementations copy from unsigned to signed then replace MAX_UINT32 with -1.
+        // I believe getting a signed int directly is cleaner.
         let lod_level: i32 = util::get_int32_le(data, offs);
         offs += size_of::<i32>();
         let batch_start = util::get_uint32_le(data, offs);
@@ -449,9 +466,119 @@ impl WmbFile {
         let batch_infos_count = util::get_uint32_le(data, offs);
 
         let name = util::get_string(data, name_offset as usize, 256).unwrap();
-        
+
         let grouped_meshes = vec!();
         LoD { name, level: lod_level, grouped_meshes }
     }
-    
+
+    fn parse_materials(data: &[u8], offset: usize, count: usize) -> Vec<Material> {
+        let mut materials = Vec::with_capacity(count);
+        for i in 0..count {
+            materials.push(Self::parse_material(data, offset + i * WMB_MATERIAL_SIZE));
+        }
+        materials
+    }
+
+    fn parse_material(data: &[u8], offset: usize) -> Material {
+        console::log_1(&format!("Parsing material at offset {}", offset).into());
+        let mut offs= offset;
+
+        offs += 4 * size_of::<u16>(); // skip 4 unknown u16 values
+        let name_offset = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
+        let shader_name_offset = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
+        let technique_name_offset = util::get_uint32_le(data, offs);
+        offs += 2 * size_of::<u32>(); // skip 1 unknown u32 value
+        let texture_offset = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
+        let texture_count = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
+        let parameter_groups_offset = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
+        let parameter_groups_count = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
+        let variables_offset = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
+        let variables_count = util::get_uint32_le(data, offs);
+
+        let name = util::get_string(data, name_offset as usize, 256).unwrap();
+        let shader_name = util::get_string(data, shader_name_offset as usize, 256).unwrap();
+        let technique_name = util::get_string(data, technique_name_offset as usize, 256).unwrap();
+
+        console::log_1(&format!(" -- Found material with name '{}', shader '{}', technique '{}', referencing {} textures",
+            name,
+            shader_name,
+            technique_name,
+            texture_count).into());
+
+        let texture_references = Self::parse_texture_references(data, texture_offset as usize, texture_count as usize);
+        let parameter_groups = Self::parse_parameter_groups(data, parameter_groups_offset as usize, parameter_groups_count as usize);
+        let variables = Vec::with_capacity(1);// = Self::parse_variables(data, variables_offset as usize, variables_count as usize);
+
+        Material { texture_references, parameter_groups, variables }
+    }
+
+    fn parse_texture_references(data: &[u8], offset: usize, count: usize) -> Vec<TextureReference> {
+        let mut texture_refs = Vec::with_capacity(count);
+        for i in 0..count {
+            texture_refs.push(Self::parse_texture_reference(data, offset + i * WMB_TEXTURE_REFERENCE_SIZE));
+        }
+        texture_refs
+    }
+
+    fn parse_texture_reference(data: &[u8], offset: usize) -> TextureReference {
+        let mut offs = offset;
+        let name_offset = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
+        let texture_ref = util::get_uint32_le(data, offs);
+        let name = util::get_string(data, name_offset as usize, 256).unwrap();
+        TextureReference { name, texture: texture_ref }
+    }
+
+    fn parse_parameter_groups(data: &[u8], offset: usize, count: usize) -> Vec<MaterialParameterGroup> {
+        let mut groups = Vec::with_capacity(count);
+        for i in 0..count {
+            groups.push(Self::parse_parameter_group(data, offset + i * WMB_PARAMETER_GROUP_SIZE));
+        }
+        groups
+    }
+
+    fn parse_parameter_group(data: &[u8], offset: usize) -> MaterialParameterGroup {
+        let mut offs = offset;
+        let index = util::get_int32_le(data, offs);
+        offs += size_of::<i32>();
+        let parameter_array_offset = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
+        let parameter_count = util::get_uint32_le(data, offs);
+        //offs += size_of::<u32>();
+
+        let mut parameters = Vec::with_capacity(parameter_count as usize);
+        for i in 0..parameter_count as usize {
+            parameters.push(util::get_float32_le(data, parameter_array_offset as usize + i * size_of::<f32>()));
+        }
+        console::log_1(&format!(" --- Found parameter group containing {} parameters", parameter_count).into());
+        MaterialParameterGroup { index, parameters }
+    }
+
+    fn parse_variables(data: &[u8], offset: usize, count: usize) -> Vec<MaterialVariable> {
+        console::log_1(&format!(" --- Reading {} variables at offset '{}'", count, offset).into());
+        let mut variables = Vec::with_capacity(count);
+        for i in 0..count {
+            variables.push(Self::parse_variable(data, offset + i * WMB_VARIABLE_SIZE));
+        }
+        variables
+    }
+
+    fn parse_variable(data: &[u8], offset: usize) -> MaterialVariable {
+        console::log_1(&format!(" --- Read variable at offset '{}'", offset).into());
+        let mut offs = offset;
+        let name_offset = util::get_uint32_le(data, offs);
+        offs += size_of::<u32>();
+        let value = util::get_float32_le(data, offs);
+
+        let name = util::get_string(data, name_offset as usize, 256).unwrap();
+        console::log_1(&format!(" --- Found variable with name '{}', value {}", name, value).into());
+        MaterialVariable { name, value }
+    }
 }

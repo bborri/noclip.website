@@ -12,6 +12,7 @@ import { WorldBlockShader } from './render.js';
 const pathBase = "NierAutomata";
 
 export class NierWorldBlock {
+    public name: string;
     private indicesCount: number = 0;
     private inputLayout: GfxInputLayout | null = null;
     private vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
@@ -19,9 +20,10 @@ export class NierWorldBlock {
     public textures: GfxTexture[] = [];
     private sampler: GfxSampler;
 
-    constructor(device: GfxDevice, renderCache: GfxRenderCache, cache: NierCache, data: ArrayBufferSlice, datFile: NierDatFile) {
+    constructor(name: string, device: GfxDevice, renderCache: GfxRenderCache, cache: NierCache, data: ArrayBufferSlice, datFile: NierDatFile) {
         let vg = datFile.models()[0].vertex_group(0);
         this.indicesCount = vg.indices.length;
+        this.name = name;
 
         this.inputLayout = cache.toInputLayout(this);
         this.vertexBufferDescriptors = [
@@ -82,6 +84,10 @@ export class NierCache {
         this.worldBlocks = new Map<string, NierWorldBlock>;
     }
 
+    public allLoadedBlocks(): NierWorldBlock[] {
+        return Array.from(this.worldBlocks.values()).filter(block => block !== undefined);
+    }
+
     public toInputLayout(worldBlock: NierWorldBlock): GfxInputLayout {
         return this.cache.createInputLayout({
             vertexAttributeDescriptors: [
@@ -118,11 +124,18 @@ export class NierCache {
         return this.worldBlocks.get(modelName);
     }
 
+    public unloadBlock(modelName: string) {
+        if (this.worldBlocks.has(modelName) && this.worldBlocks.get(modelName) !== undefined) {
+            this.worldBlocks.delete(modelName);
+            console.log("Block " + modelName + " removed from cache!");
+        }
+    }
+
     private async loadModel(modelName: string): Promise<NierWorldBlock> {
         console.time("loading DTT");
         const file = await this.loadFile(this.dttFromModel(modelName));
         //this.loadFile(this.datFromModel(modelName)); // TODO: Also load corresponding .dat
-        const block = new NierWorldBlock(this.device, this.renderCache, this, await file.binary, await file.datFile);
+        const block = new NierWorldBlock(modelName, this.device, this.renderCache, this, await file.binary, await file.datFile);
         await console.timeEnd("loading DTT");
         return await block;
     }
