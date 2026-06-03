@@ -1,14 +1,14 @@
 import { TextureMapping } from '../TextureHolder.js';
-import { GfxDevice, GfxTexture, GfxProgram, GfxSampler, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxFrontFaceMode, GfxSamplerBinding } from '../gfx/platform/GfxPlatform.js';
+import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxFrontFaceMode, GfxSamplerBinding } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as DDS from '../DarkSouls/dds.js';
 
-import { NierCache } from './cache.js';
-import { NierBatch, NierDatFile, NierLOD, NierMaterial, NierMesh, NierMeshMaterialPair, NierVertexGroup } from "noclip-rust-support";
+import { NierBatch, NierDatFile, NierLOD, NierMesh, NierMeshMaterialPair, NierVertexGroup } from "noclip-rust-support";
 import { WorldBlockShader } from './render.js';
+import { vec3 } from 'gl-matrix';
 
 export class Material {
     public name: string = "";
@@ -38,6 +38,8 @@ class VertexGroup {
 
 export class WorldBlock {
     public name: string;
+    public valid: boolean = false;
+    public boundingBox: { min: vec3, max: vec3 } | null = null;
     private indicesCount: number = 0;
 
     private inputLayout: GfxInputLayout | null = null;
@@ -52,7 +54,7 @@ export class WorldBlock {
     public textures: GfxTexture[] = [];
     private samplerMappings: TextureMapping[] = [];
 
-    constructor(name: string, device: GfxDevice, renderCache: GfxRenderCache, cache: NierCache, data: ArrayBufferSlice, datFile: NierDatFile) {
+    constructor(name: string, device: GfxDevice, renderCache: GfxRenderCache, data: ArrayBufferSlice, datFile: NierDatFile) {
         this.name = name;
         let models = datFile.models();
         if (models.length === 0) {
@@ -60,6 +62,10 @@ export class WorldBlock {
             return;
         }
         let model = models[0];
+        this.boundingBox = {
+            min: vec3.fromValues(model.bounding_box[0], model.bounding_box[1], model.bounding_box[2]),
+            max: vec3.fromValues(model.bounding_box[3], model.bounding_box[4], model.bounding_box[5])
+        };
         this.lods = model.lods();
         if (this.lods.length === 0) {
             console.warn(`Block ${this.name}: No lod found!`);
@@ -98,6 +104,7 @@ export class WorldBlock {
                 this.vertexGroups.push(undefined);
             }
         }
+        this.valid = this.indicesCount > 0;
 
         // Textures
         let textureBlocks = datFile.texture_blocks();
@@ -123,23 +130,13 @@ export class WorldBlock {
 
     public prepareToRender(
         renderInstManager: GfxRenderInstManager,
-        shader: GfxProgram,
         fillRenderParamsCallback: (material: Material) => void) {
 
         if (this.vertexGroups.length === 0 || this.vertexGroups[0] === undefined) {
             return;
         }
         const renderInst = renderInstManager.newRenderInst();
-                renderInst.setMegaStateFlags({ cullMode: GfxCullMode.None, frontFace: GfxFrontFaceMode.CW });
-                renderInst.setGfxProgram(shader);
-                renderInst.setSamplerBindingsFromTextureMappings(this.samplerMappings);
-        const sampler = renderInstManager.gfxRenderCache.createSampler({
-            minFilter: GfxTexFilterMode.Bilinear,
-            magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.Nearest,
-            wrapS: GfxWrapMode.Repeat,
-            wrapT: GfxWrapMode.Repeat
-        });
+        renderInst.setSamplerBindingsFromTextureMappings(this.samplerMappings);
         const vertexBufferDescriptors = [
             { buffer: this.vertexGroups[0].positionBuffer as GfxBuffer, byteOffset: 0 },
             { buffer: this.vertexGroups[0].colorBuffer as GfxBuffer, byteOffset: 0 },
@@ -153,11 +150,8 @@ export class WorldBlock {
             this.inputLayout,
             vertexBufferDescriptors,
             indexBufferDescriptor);
-        renderInst.setSamplerBindingsFromTextureMappings(this.textures.map(texture => {
-            return { gfxTexture: texture, gfxSampler: sampler };
-        }));
         renderInst.setDrawCount(this.vertexGroups[0].indexCount);
-        renderInst.setInstanceCount(1);
+        //renderInst.setInstanceCount(1);
         renderInstManager.submitRenderInst(renderInst);
 
 /*
@@ -229,7 +223,7 @@ export class WorldBlock {
                 { location: WorldBlockShader.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }, // XYZ
                 { location: WorldBlockShader.a_Color, bufferIndex: 1, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 }, // RGBA
                 { location: WorldBlockShader.a_TexCoord, bufferIndex: 2, format: GfxFormat.F32_RG, bufferByteOffset: 0 },  // UV
-                { location: WorldBlockShader.a_Normal, bufferIndex: 3, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }  // Normal XYZ
+                { location: WorldBlockShader.a_Normal, bufferIndex: 3, format: GfxFormat.F32_RGB, bufferByteOffset: 0 }  // XYZ
             ],
             vertexBufferDescriptors: [
                 { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },

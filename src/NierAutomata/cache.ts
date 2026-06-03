@@ -54,7 +54,7 @@ export class NierCache {
         //console.time("loading DTT");
         const file = await this.loadFile(this.dttFromModel(modelName));
         //this.loadFile(this.datFromModel(modelName)); // TODO: Also load corresponding .dat ?
-        const block = new WorldBlock(modelName, this.device, this.renderCache, this, await file.binary, await file.datFile);
+        const block = new WorldBlock(modelName, this.device, this.renderCache, await file.binary, await file.datFile);
         //await console.timeEnd("loading DTT");
         return await block;
     }

@@ -1,7 +1,7 @@
 // WMB parser
 // Contains World Mesh data
 
-use crate::{geometry::AABB, nierautomata::constants, util};
+use crate::{nierautomata::constants, util};
 
 use float16::f16;
 use nalgebra_glm::{TVec2, TVec3, Vec3, TVec4, make_vec2, make_vec3, make_vec4};
@@ -78,7 +78,7 @@ pub struct Batch {
 #[wasm_bindgen(js_name = "NierMesh", getter_with_clone)]
 pub struct Mesh {
     pub name: String,
-    bounding_box: AABB,
+    pub bounding_box: Vec<f32>,
     pub material_indices: Vec<u16>
 }
 
@@ -124,11 +124,11 @@ pub struct Vertex {
 type Color = TVec4<f32>;
 
 #[derive(Debug, Clone)]
-#[wasm_bindgen(js_name = "NierWorldMesh")]
+#[wasm_bindgen(js_name = "NierWorldMesh", getter_with_clone)]
 pub struct WmbFile {
     block_offset: usize,
     vertex_groups: Vec<VertexGroup>,
-    bounding_box: AABB,
+    pub bounding_box: Vec<f32>,
     lods: Vec<LOD>,
     batches: Vec<Batch>,
     meshes: Vec<Mesh>,
@@ -234,7 +234,7 @@ impl WmbFile {
         self.mesh_material_pairs.clone()
     }
 
-    fn parse_aabb(data: &[u8], offset: usize) -> AABB {
+    fn parse_aabb(data: &[u8], offset: usize) -> Vec<f32> {
         let x_min = util::get_float32_le(data, offset) * constants::WORLD_SCALE;
         let y_min = util::get_float32_le(data, offset + 4) * constants::WORLD_SCALE;
         let z_min = util::get_float32_le(data, offset + 8) * constants::WORLD_SCALE;
@@ -247,7 +247,7 @@ impl WmbFile {
                 x_max, y_max, z_max
             )
             .into());*/
-        AABB::from_f32(x_min, y_min, z_min, x_max, y_max, z_max)
+        Vec::from([x_min, y_min, z_min, x_max, y_max, z_max])
     }
 
     fn parse_lods(data: &[u8], offset: usize, count: usize) -> Vec<LOD> {
@@ -720,6 +720,8 @@ impl WmbFile {
             ];
             world_data.push(world_data_entry);
         }
+        console::log_1(&format!(" --- World dataat offset {:x}: {}, {}, {}, {}, {}, {}",
+            offset, world_data[0][0], world_data[0][1], world_data[0][2], world_data[0][3], world_data[0][4], world_data[0][5]).into());
         world_data
     }
 }

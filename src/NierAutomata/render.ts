@@ -44,10 +44,11 @@ in vec2 v_TexCoord;
 in vec3 v_Normal;
 
 void main() {
-    mediump vec4 diffuse = texture(SAMPLER_2D(u_Textures[0]), v_TexCoord.xy);
-    mediump vec4 normal = texture(SAMPLER_2D(u_Textures[1]), v_TexCoord.xy);
-    mediump vec4 mask = texture(SAMPLER_2D(u_Textures[2]), v_TexCoord.xy);
-    mediump vec4 specular = texture(SAMPLER_2D(u_Textures[3]), v_TexCoord.xy);
+    vec2 uv = v_TexCoord;
+    vec4 diffuse = texture(SAMPLER_2D(u_TextureColor1), uv);
+    vec4 normal = texture(SAMPLER_2D(u_TextureColor2), uv);
+    vec4 mask = texture(SAMPLER_2D(u_TextureColor3), uv);
+    vec4 specular = texture(SAMPLER_2D(u_TextureColor4), uv);
 
     // Colors in Nier are stored in a strange way, among 3 textures.
     // color = (1 - r) * (g * color3 + (1 - g) * color2) + r * color1
@@ -64,8 +65,7 @@ void main() {
 `;
 
     public static Common = `
-precision mediump float;
-precision highp sampler2DArray;
+precision highp float;
 
 ${GfxShaderLibrary.MatrixLibrary}
 
@@ -82,6 +82,9 @@ layout(std140) uniform ub_RenderParams {
     vec4 u_MaterialTextures;
 };
 */
-layout(location = 0) uniform sampler2D u_Textures[4];
+layout(location = 0) uniform sampler2D u_TextureColor1;
+layout(location = 1) uniform sampler2D u_TextureColor2;
+layout(location = 2) uniform sampler2D u_TextureColor3;
+layout(location = 3) uniform sampler2D u_TextureColor4;
 `;
 }

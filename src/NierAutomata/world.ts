@@ -1,6 +1,7 @@
 import { vec3 } from "gl-matrix"
 import { NierCache } from "./cache.js";
 import { WorldBlock } from "./worldblock.js";
+import { dfShow } from "../DebugFloaters.js";
 
 // Hex grid is 24x24, but numbering is a bit weird:
 // 00-11 -> 23-00
@@ -90,13 +91,15 @@ class HexCoord {
 // Arbitrary center position
 const GRID_CENTER = new HexCoord(11, 17);
 // Distance between centers of adjacent hexagons
-const HEX_SIZE: number = 165 * WORLD_SCALE;
+const HEX_SIZE: number = 155 * WORLD_SCALE;
 
 
 export class World {
 
     private cache: NierCache;
     private currentHex: HexCoord | undefined;
+    @dfShow()
+    public loadedBlocks: { name: string, position: vec3 }[] = [];
 
     constructor(cache: NierCache) {
         this.cache = cache;
@@ -134,6 +137,9 @@ export class World {
         return [ { name: currentBlockName, position: World.HexToWorldCoords(this.currentHex), block } ];*/
         // All loaded blocks
         return this.cache.allLoadedBlocks().map(block => {
+            if (!block.valid) {
+                return undefined;
+            }
             const blockName = block.name;
             const blockPosition = World.HexToWorldCoords(HexCoord.fromBlockName(blockName) || GRID_CENTER);
             return block ? { name: blockName, position: blockPosition, block } : undefined;

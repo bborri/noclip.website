@@ -3,7 +3,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as Viewer from '../viewer.js';
 import { SceneContext } from '../SceneBase.js';
 import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxDevice, GfxProgram, GfxCullMode, GfxFrontFaceMode, GfxSamplerFormatKind, GfxTextureDimension } from '../gfx/platform/GfxPlatform.js';
+import { GfxDevice, GfxProgram, GfxCullMode, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInst, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
@@ -31,18 +31,16 @@ export class NierRenderer implements Viewer.SceneGfx {
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = this.renderHelper.pushTemplateRenderInst();
-        const renderInstManager = this.renderHelper.renderInstManager;
 
+        const renderInstManager = this.renderHelper.renderInstManager;
+        renderInstManager.setCurrentList(this.renderInstListMain);
+
+        const template = this.renderHelper.pushTemplateRenderInst();
+        template.setGfxProgram(this.shader);
         template.setBindingLayouts([ { numSamplers: 4, numUniformBuffers: 2 } ]);
 
         let uniformOffset = 0;
         uniformOffset = this.fillCameraParams(template, uniformOffset, viewerInput);
-
-        renderInstManager.setCurrentList(this.renderInstListMain);
-
-        template.setGfxProgram(this.shader);
-        template.setUniformBuffer(this.renderHelper.uniformBuffer);
 
         const cameraPos = mat4.getTranslation(vec3.create(), viewerInput.camera.worldMatrix);
         this.world.getVisibleBlocks(cameraPos).forEach(({name, position, block}) => {
@@ -50,11 +48,11 @@ export class NierRenderer implements Viewer.SceneGfx {
                 console.log("World block " + name + ' not yet ready !');
             }
             else {
-                uniformOffset = this.fillObjectParams(template, uniformOffset, position);
+                uniformOffset = this.fillObjectParams(template, 0, position);
                 const fillRenderParamsCallback = (material: Material): void => {
-                    uniformOffset = this.fillRenderParams(template, uniformOffset, material);
+                    uniformOffset = this.fillRenderParams(template, 0, material);
                 }
-                block?.prepareToRender(renderInstManager, this.shader, fillRenderParamsCallback);
+                block?.prepareToRender(renderInstManager, fillRenderParamsCallback);
             }
         });
         template.setMegaStateFlags({ cullMode: GfxCullMode.None, frontFace: GfxFrontFaceMode.CW });
@@ -71,8 +69,7 @@ export class NierRenderer implements Viewer.SceneGfx {
     }
 
     private fillObjectParams(template: GfxRenderInst, offset: number, position: vec3): number {
-        const modelMatrix = mat4.create();
-        mat4.fromTranslation(modelMatrix, position);
+        const modelMatrix = mat4.fromTranslation(mat4.create(), position);
 
         const data = template.allocateUniformBufferF32(WorldBlockShader.ub_ObjectParams, 12);
         let offs = offset;
@@ -93,11 +90,9 @@ export class NierRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        viewerInput.camera.setClipPlanes(0.5, 10000);
         this.renderHelper.debugDraw.beginFrame(viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         //this.renderHelper.debugDraw.screenPrintText('NieR:Automata', Red);
-
-        // Prepare render insts before building render graph
-        this.prepareToRender(device, viewerInput);
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
@@ -120,6 +115,7 @@ export class NierRenderer implements Viewer.SceneGfx {
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.prepareToRender(device, viewerInput);
         builder.execute();
         this.renderInstListMain.reset();
     }
