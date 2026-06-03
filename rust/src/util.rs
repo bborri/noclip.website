@@ -1,3 +1,4 @@
+use std::cmp;
 use std::io;
 use std::convert::TryInto;
 use float16::f16;
@@ -140,12 +141,7 @@ pub fn get_string(
     max_string_size: usize
 ) -> io::Result<String> {
 
-    let end = offset + max_string_size;
-    if end > data.len() {
-        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Not enough data!"));
-    }
-
-    let slice = &data[offset..end];
+    let slice = &data[offset..cmp::min(offset + max_string_size, data.len())];
     // `max_string_size` is a maximum, the string could be shorter so let's find the first '\0'
     let first_zero = slice.iter().position(
         |char| { *char == 0u8 }).

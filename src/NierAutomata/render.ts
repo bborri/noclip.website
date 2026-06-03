@@ -1,15 +1,16 @@
 import { DeviceProgram } from "../Program";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 
-// Default shader for debugging
+// Shader for world rendering
 export class WorldBlockShader extends DeviceProgram {
     public static a_Position = 0;
     public static a_Color = 1;
     public static a_TexCoord = 2;
     public static a_Normal = 3;
 
-    public static ub_SceneParams = 0;
+    public static ub_CameraParams = 0;
     public static ub_ObjectParams = 1;
+    public static ub_RenderParams = 2;
 
     // Vertex shader
     public override vert = `
@@ -43,46 +44,44 @@ in vec2 v_TexCoord;
 in vec3 v_Normal;
 
 void main() {
-    vec4 c1 = texture(SAMPLER_2D(u_TextureColor1), v_TexCoord.xy);
-    vec4 c2 = texture(SAMPLER_2D(u_TextureColor2), v_TexCoord.xy);
-    vec4 c3 = texture(SAMPLER_2D(u_TextureColor3), v_TexCoord.xy);
+    mediump vec4 diffuse = texture(SAMPLER_2D(u_Textures[0]), v_TexCoord.xy);
+    mediump vec4 normal = texture(SAMPLER_2D(u_Textures[1]), v_TexCoord.xy);
+    mediump vec4 mask = texture(SAMPLER_2D(u_Textures[2]), v_TexCoord.xy);
+    mediump vec4 specular = texture(SAMPLER_2D(u_Textures[3]), v_TexCoord.xy);
 
     // Colors in Nier are stored in a strange way, among 3 textures.
     // color = (1 - r) * (g * color3 + (1 - g) * color2) + r * color1
     // source: https://discord.com/channels/457656329235070981/837783151329411122/990068822063075358
-    float r = c2.r;
-    float g = c2.g;
-    vec3 color1 = c1.rgb;
-    vec3 color2 = c2.rgb;
-    vec3 color3 = c3.rgb;
+    float r = 0.25;
+    float g = 0.25;
+    vec3 color1 = diffuse.rgb;
+    vec3 color2 = normal.rgb;
+    vec3 color3 = mask.rgb;
     vec3 outColor = (1.0 - r) * (g * color3 + (1.0 - g) * color2) + r * color1;
 
-    gl_FragColor = vec4(v_Normal.rgb, 1.0); //vec4(outColor, 1.0);
+    gl_FragColor = vec4(v_Normal.rgb, 1.0); // vec4(diffuse.rgb, 1.0); //vec4(outColor, 1.0);
 }
 `;
 
     public static Common = `
-// Import some helper code. In this case, we use a special matrix library as a workaround for some computers
-// with incomplete WebGL implementations.
+precision mediump float;
+precision highp sampler2DArray;
+
 ${GfxShaderLibrary.MatrixLibrary}
 
-// Declare our uniform data. These are parameters that are constant across the entire draw call,
-// and do not change per vertex or per pixel.
 layout(std140) uniform ub_SceneParams {
-    // Define our ViewProjection, or "ClipFromWorld" matrix, since it transforms us into clip space, from world space.
-    // I use a "u_" prefix for uniform parameters.
     Mat4x4 u_ClipFromWorld;
 };
 
-// Define a second matrix for our cube's transform. This could be in the uniform buffer above, however
-// I'm declaring two of them just to show how that works.
 layout(std140) uniform ub_ObjectParams {
     Mat3x4 u_WorldFromLocal;
 };
-
-// Declare our texture for the cube.
-layout(location = 0) uniform sampler2D u_TextureColor1;
-layout(location = 1) uniform sampler2D u_TextureColor2;
-layout(location = 2) uniform sampler2D u_TextureColor3;
+/*
+layout(std140) uniform ub_RenderParams {
+    // x: diffuse, y: normal, z: mask, w: specular
+    vec4 u_MaterialTextures;
+};
+*/
+layout(location = 0) uniform sampler2D u_Textures[4];
 `;
 }
