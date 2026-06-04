@@ -18,7 +18,7 @@ const WORLD_SCALE = 1;
 // Actual real blocks available on disk, which is a subset of the possible hex coordinates
 // This is used to avoid trying to load blocks that don't exist
 const COMMON_BLOCK_LIST = new Set<string>([
-    //"ga0000", "ga0001", "ga0002"
+    "ga0000", "ga0001", "ga0002"
 ]);
 
 const BLOCK_LIST = new Set<string>([
@@ -91,7 +91,7 @@ class HexCoord {
 // Arbitrary center position
 const GRID_CENTER = new HexCoord(11, 17);
 // Distance between centers of adjacent hexagons
-const HEX_SIZE: number = 155 * WORLD_SCALE;
+const HEX_SIZE: number = 165 * WORLD_SCALE;
 
 
 export class World {
@@ -104,9 +104,9 @@ export class World {
     constructor(cache: NierCache) {
         this.cache = cache;
         this.currentHex = undefined;
-        COMMON_BLOCK_LIST.forEach(blockName => {
+        /*COMMON_BLOCK_LIST.forEach(blockName => {
             this.cache.loadBlock(blockName);
-        });
+        });*/
         /*BLOCK_LIST.forEach(blockName => {
             this.cache.loadBlock(blockName);
         });*/

@@ -12,7 +12,7 @@ import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from 
 import { WorldBlockShader } from "./render.js";
 import { NierCache } from "./cache.js";
 import { World } from "./world.js";
-import { Material } from "./worldblock.js";
+import { Material, ShaderType } from "./worldblock.js";
 
 export class NierRenderer implements Viewer.SceneGfx {
     private context: SceneContext;
@@ -37,7 +37,7 @@ export class NierRenderer implements Viewer.SceneGfx {
 
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setGfxProgram(this.shader);
-        template.setBindingLayouts([ { numSamplers: 4, numUniformBuffers: 2 } ]);
+        template.setBindingLayouts([ { numSamplers: 7, numUniformBuffers: 2 } ]);
 
         let uniformOffset = 0;
         uniformOffset = this.fillCameraParams(template, uniformOffset, viewerInput);
@@ -52,10 +52,10 @@ export class NierRenderer implements Viewer.SceneGfx {
                 const fillRenderParamsCallback = (material: Material): void => {
                     uniformOffset = this.fillRenderParams(template, 0, material);
                 }
-                block?.prepareToRender(renderInstManager, fillRenderParamsCallback);
+                block?.prepareToRender(renderInstManager, template, fillRenderParamsCallback);
             }
         });
-        template.setMegaStateFlags({ cullMode: GfxCullMode.None, frontFace: GfxFrontFaceMode.CW });
+        template.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
 
         renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
@@ -79,13 +79,37 @@ export class NierRenderer implements Viewer.SceneGfx {
 
     private fillRenderParams(template: GfxRenderInst, offset: number, material: Material): number {
         // FIXME: Issue with UNIFORM_BLOCK_DATA_SIZE alignment?
-        const data = template.allocateUniformBufferF32(WorldBlockShader.ub_RenderParams, 8);
-        const diffuse = material.variables.find(mat => mat.name === "g_AlbedoMap")?.value;
-        const normal = material.variables.find(mat => mat.name === "g_NormalMap")?.value;
-        const mask = material.variables.find(mat => mat.name === "g_MaskMap")?.value;
-        const specular = material.variables.find(mat => mat.name === "g_MaskMap2")?.value;
+        const data = template.allocateUniformBufferF32(WorldBlockShader.ub_RenderParams, 48);
+        const usePBS00 = material.shaderType === ShaderType.PBS00;
+        let x = 0, y = 0, z = 0, w = 0;
+        let x2 = 0, y2 = 0, z2 = 0, w2 = 0;
+        let x3 = 0, y3 = 0, z3 = 0, w3 = 0;
+        if (usePBS00) {
+            x = material.variables.get("g_AlbedoMap")?.valueOf() ?? 0;
+            y = material.variables.get("g_LightMap")?.valueOf() ?? 0;
+            z = material.variables.get("g_MaskMap")?.valueOf() ?? 0;
+            w = 0;
+            x2 = material.variables.get("g_NormalMap")?.valueOf() ?? 0;
+            y2 = material.variables.get("g_DetailNormalMap")?.valueOf() ?? 0;
+            z2 = material.variables.get("g_EnvMap")?.valueOf() ?? 0;
+            w2 = material.variables.get("g_IrradianceMap")?.valueOf() ?? 0;
+        } else {
+            x = material.variables.get("g_AlbedoMap1")?.valueOf() ?? 0;
+            y = material.variables.get("g_AlbedoMap2")?.valueOf() ?? 0;
+            z = material.variables.get("g_AlbedoMap3")?.valueOf() ?? 0;
+            w = 1;
+            x2 = material.variables.get("g_LightMap")?.valueOf() ?? 0;
+            y2 = material.variables.get("g_MaskMap")?.valueOf() ?? 0;
+            z2 = material.variables.get("g_NormalMap")?.valueOf() ?? 0;
+            w2 = material.variables.get("g_NormalMap2")?.valueOf() ?? 0;
+            x3 = material.variables.get("g_NormalMap3")?.valueOf() ?? 0;
+            y3 = material.variables.get("g_EnvMap")?.valueOf() ?? 0;
+            z3 = material.variables.get("g_IrradianceMap")?.valueOf() ?? 0;
+        }
         let offs = offset;
-        offs += fillVec4(data, offs, diffuse as number, normal, mask, specular);
+        offs += fillVec4(data, offs, x, y, z, w);
+        offs += fillVec4(data, offs, x2, y2, z2, w2);
+        offs += fillVec4(data, offs, x3, y3, z3, w3);
         return offs;
     }
 

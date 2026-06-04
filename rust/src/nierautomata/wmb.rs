@@ -26,6 +26,7 @@ type WorldDataEntry = [f32; 6];
 #[wasm_bindgen(js_name = "NierMaterial", getter_with_clone)]
 pub struct Material {
     pub name: String,
+    pub shader_name: String,
     pub texture_references: Vec<TextureReference>,
     pub parameter_groups: Vec<MaterialParameterGroup>,
     pub variables: Vec<MaterialVariable>
@@ -634,12 +635,21 @@ impl WmbFile {
             texture_count,
             parameter_groups_count,
             variables_count).into());*/
+        if shader_name != "PBS00_XXXXX" &&
+           shader_name != "PBS10_XXXXX" &&
+           shader_name != "PBS11_XXXXX" &&
+           shader_name != "Plt00_XXXXX" &&
+           shader_name != "Wtr00_XXXXX" &&
+           shader_name != "Wtr01_XXXXX" &&
+           shader_name != "CNS00_XXXXX" {
+            panic!("Unsupported shader type: {}", shader_name);
+        }
 
         let texture_references = Self::parse_texture_references(data, texture_offset as usize, texture_count as usize);
         let parameter_groups = Self::parse_parameter_groups(data, parameter_groups_offset as usize, parameter_groups_count as usize);
         let variables = Self::parse_variables(data, variables_offset as usize, variables_count as usize);
 
-        Material { name, texture_references, parameter_groups, variables }
+        Material { name, shader_name, texture_references, parameter_groups, variables }
     }
 
     fn parse_texture_references(data: &[u8], offset: usize, count: usize) -> Vec<TextureReference> {

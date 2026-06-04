@@ -1,7 +1,7 @@
 import { TextureMapping } from '../TextureHolder.js';
 import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxFrontFaceMode, GfxSamplerBinding } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { createBufferFromData } from '../gfx/helpers/BufferHelpers.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as DDS from '../DarkSouls/dds.js';
@@ -10,9 +10,15 @@ import { NierBatch, NierDatFile, NierLOD, NierMesh, NierMeshMaterialPair, NierVe
 import { WorldBlockShader } from './render.js';
 import { vec3 } from 'gl-matrix';
 
+export enum ShaderType {
+    PBS00,
+    PBS10
+}
+
 export class Material {
     public name: string = "";
-    public variables: { name: string, value: number }[] = [];
+    public shaderType: ShaderType = ShaderType.PBS00;
+    public variables: Map<string, number> = new Map();
     public parameterGroups: { index: number, parameters: Float32Array }[] = [];
     public textureReferences: { name: string, index: number }[] = [];
 }
@@ -74,7 +80,11 @@ export class WorldBlock {
         this.materials = model.materials().map(mat => {
             const material = new Material();
             material.name = mat.name;
-            material.variables = mat.variables;
+            material.shaderType = mat.shader_name === "PBS00_XXXXX" ? ShaderType.PBS00 : ShaderType.PBS10;
+            material.variables = new Map();
+            for (const [key, value] of Object.entries(mat.variables)) {
+                material.variables.set(key, value.value);
+            }
             material.parameterGroups = mat.parameter_groups.map(group => (
                 {
                     index: group.index,
@@ -130,33 +140,13 @@ export class WorldBlock {
 
     public prepareToRender(
         renderInstManager: GfxRenderInstManager,
+        template: GfxRenderInst,
         fillRenderParamsCallback: (material: Material) => void) {
 
         if (this.vertexGroups.length === 0 || this.vertexGroups[0] === undefined) {
             return;
         }
-        const renderInst = renderInstManager.newRenderInst();
-        renderInst.setSamplerBindingsFromTextureMappings(this.samplerMappings);
-        const vertexBufferDescriptors = [
-            { buffer: this.vertexGroups[0].positionBuffer as GfxBuffer, byteOffset: 0 },
-            { buffer: this.vertexGroups[0].colorBuffer as GfxBuffer, byteOffset: 0 },
-            { buffer: this.vertexGroups[0].texCoordBuffer as GfxBuffer, byteOffset: 0 },
-            { buffer: this.vertexGroups[0].normalBuffer as GfxBuffer, byteOffset: 0 }
-        ];
-        const indexBufferDescriptor = {
-            buffer: this.vertexGroups[0].indexBuffer as GfxBuffer, byteOffset: 0
-        };
-        renderInst.setVertexInput(
-            this.inputLayout,
-            vertexBufferDescriptors,
-            indexBufferDescriptor);
-        renderInst.setDrawCount(this.vertexGroups[0].indexCount);
-        //renderInst.setInstanceCount(1);
-        renderInstManager.submitRenderInst(renderInst);
 
-/*
-        const template = renderInstManager.pushTemplate();
-        template.setGfxProgram(shader);
         template.setSamplerBindingsFromTextureMappings(this.samplerMappings);
 
         for (let i = 0; i < this.lods.length; i++) {
@@ -173,16 +163,14 @@ export class WorldBlock {
                 }
 
                 const renderInst = renderInstManager.newRenderInst();
-                renderInst.setMegaStateFlags({ cullMode: GfxCullMode.None, frontFace: GfxFrontFaceMode.CW });
-                renderInst.setGfxProgram(shader);
-                renderInst.setSamplerBindingsFromTextureMappings(this.samplerMappings);
-/*
+                renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
+
                 if (batch.vertex_group_index >= this.vertexGroups.length || batch.vertex_group_index < 0) {
-                    console.warn(`Batch ${j} uses vertex group ${batch.vertex_group_index} but only ${this.vertexGroups.length} are available! Skipping...`);
+                    //console.warn(`Batch ${j} uses vertex group ${batch.vertex_group_index} but only ${this.vertexGroups.length} are available! Skipping...`);
                     continue;
-                }*/
+                }
                 // FIXME: batchInfo.vertex_group_index has very high values where we usually expect 0-2
-/*                const vertexGroup = this.vertexGroups[0/*batchInfo.vertex_group_index*//*];
+                const vertexGroup = this.vertexGroups[0/*batchInfo.vertex_group_index*/];
                 const vertexBufferDescriptors = [
                     { buffer: vertexGroup.positionBuffer as GfxBuffer, byteOffset: 0 },
                     { buffer: vertexGroup.colorBuffer as GfxBuffer, byteOffset: 0 },
@@ -200,7 +188,6 @@ export class WorldBlock {
                 /*console.debug(`Batch ${j}: material ${mesh.material_indices[0]},
                     vertex offset ${batch.vertex_offset}, vertex count ${batch.vertex_count},
                     index offset ${batch.index_offset}, index count ${batch.index_count}`);*/
-/*
 
                 const mat = this.materials[batchInfo.material_index];
                 //fillRenderParamsCallback(mat);
@@ -213,8 +200,6 @@ export class WorldBlock {
                 }
             }
         }
-
-        renderInstManager.popTemplate();*/
     }
 
     public static DefaultInputLayout(renderCache: GfxRenderCache): GfxInputLayout {
